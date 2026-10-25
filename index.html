@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Lost Mansion - Core Engine</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Courier New', Courier, monospace;
+            user-select: none;
+        }
+
+        #game-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        /* Upscaled Retro Canvas Window */
+        canvas {
+            width: 100vw !important;
+            height: 100vh !important;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        /* CRT Overlay Layer */
+        #crt-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 6px 100%;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        /* Crimson Peripheral Veins Overlay */
+        #panic-vignette {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            box-shadow: inset 0 0 80px rgba(139, 0, 0, 0);
+            transition: box-shadow 0.1s ease;
+            z-index: 9;
+            pointer-events: none;
+        }
+
+        /* HUD Display Elements */
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #8b0000;
+            text-shadow: 2px 2px #000;
+            font-size: 14px;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .hud-bar-container {
+            width: 150px;
+            height: 10px;
+            background: #220000;
+            border: 1px solid #440000;
+            margin-top: 4px;
+            margin-bottom: 8px;
+        }
+
+        .hud-bar {
+            height: 100%;
+            background: #8b0000;
+            width: 100%;
+        }
+
+        #inventory-hud {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 6px;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .inv-slot {
+            width: 48px;
+            height: 48px;
+            background: rgba(15, 5, 5, 0.8);
+            border: 2px solid #331111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 10px;
+            color: #662222;
+            text-align: center;
+        }
+
+        .inv-slot.active {
+            border-color: #8b0000;
+            color: #ff3333;
+            box-shadow: 0 0 8px rgba(139, 0, 0, 0.6);
+        }
+
+        #death-skulls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 20;
+        }
+
+        .skull {
+            font-size: 24px;
+            color: #222;
+            text-shadow: 1px 1px #000;
+        }
+
+        .skull.lit {
+            color: #ff3333;
+            animation: flicker 0.2s infinite alternate;
+        }
+
+        @keyframes flicker {
+            0% { opacity: 0.8; }
+            100% { opacity: 1; text-shadow: 0 0 6px #ff0000; }
+        }
+
+        #subtitles {
+            position: absolute;
+            bottom: 100px;
+            width: 100%;
+            text-align: center;
+            color: #ff3333;
+            font-size: 16px;
+            font-weight: bold;
+            text-shadow: 2px 2px #000;
+            z-index: 30;
+            pointer-events: none;
+        }
+
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 4px;
+            height: 4px;
+            background: rgba(139, 0, 0, 0.5);
+            border-radius: 50%;
+            z-index: 15;
+            pointer-events: none;
+        }
+
+        #blocker {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #8b0000;
+            z-index: 100;
+            cursor: pointer;
+            text-align: center;
+        }
+    </style>
+    <!-- Three.js Library -->
+    <script src="https://cloudflare.com"></script>
+</head>
+<body>
+    <div id="blocker">
+        <div>
+            <h1 style="font-size: 32px; letter-spacing: 4px; margin-bottom: 10px;">THE LOST MANSION</h1>
+            <p style="font-size: 14px; color: #666;">CLICK TO AWAKEN SYSTEM FRAME ARCHITECTURE</p>
+        </div>
+    </div>
+
+    <div id="game-container">
+        <div id="crt-overlay"></div>
+        <div id="panic-vignette"></div>
+        <div id="crosshair"></div>
+        <div id="subtitles"></div>
+        
+        <div id="hud">
+            <div>HP</div>
+            <div class="hud-bar-container"><div id="hp-bar" class="hud-bar"></div></div>
+            <div>STAMINA</div>
+            <div class="hud-bar-container"><div id="stamina-bar" class="hud-bar" style="background:#006400;"></div></div>
+            <div>SANITY</div>
+            <div class="hud-bar-container"><div id="sanity-bar" class="hud-bar" style="background:#4b0082;"></div></div>
+            <div id="progression-tracker" style="margin-top: 15px; font-size: 11px; color: #aaa;">
+                PROGRESS: <span id="comp-val">0%</span>
+            </div>
+        </div>
+
+        <div id="death-skulls">
+            <span class="skull" id="skull-1">☠</span>
+            <span class="skull" id="skull-2">☠</span>
+            <span class="skull" id="skull-3">☠</span>
+        </div>
+
+        <div id="inventory-hud">
+            <div class="inv-slot active" id="slot-0">TORCH</div>
+            <div class="inv-slot" id="slot-1">---</div>
+            <div class="inv-slot" id="slot-2">---</div>
+            <div class="inv-slot" id="slot-3">---</div>
+            <div class="inv-slot" id="slot-4">---</div>
+            <div class="inv-slot" id="slot-5">---</div>
+            <div class="inv-slot" id="slot-6">---</div>
+            <div class="inv-slot" id="slot-7">---</div>
+        </div>
+    </div>
+
+    <script>
+        // --- CORE ENGINE CONFIGURATION ---
+        const ENGINE = {
+            width: 320,
+            height: 240,
+            fpsTarget: 60,
+            frameTime: 1000 / 60
+        };
+
+        // --- SYSTEM ENGINE HARDWARE CONFIGS ---
+        let scene, camera, renderer, clock;
+        let audioCtx, lowPassFilter;
+        let renderTarget;
+        
+        // --- GAME SYSTEM MATRIX ---
+        const PLAYER = {
+            hp: 100,
+            stamina: 100,
+            sanity: 100,
+            coins: 0,
+            isSprinting: false,
+            isExhausted: false,
+            exhaustTimer: 0,
+            velocity: new THREE.Vector3(),
+            direction: new THREE.Vector3(),
+            controlsLocked: true,
+            activeSlot: 0,
+            inventory: ["Torchlight", null, null, null, null, null, null, null],
+            torchDropped: false,
+            curedCount: 0,
+            lives: 3,
+            currentFloor: 1
+        };
+
+        const WORLD_PROGRESS = {
+            floor1Keys: 0,
+            floor2Keys: 0,
+            floor2CodeDigits: [],
+            basementKeys: 0,
+            basementCodeFound: false,
+            ancientStoneFound: false,
+            floor2Unlocked: false,
+            floor3Unlocked: false,
+            basementUnlocked: false,
+            terminalActivated: false,
+            completion: 0
+        };
+
+        // Dynamic System Entities Database
+        const entities = [];
+        let torchLightSource;
+        let droppedTorchMesh = null;
+
+        // Custom Pixelation Dither Rendering Layer
+        const pixelShaderMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                tDiffuse: { value: null },
+                pixelSize: { value: new THREE.Vector2(1, 1) },
+                sanityFactor: { value: 0.0 },
+                chromaticAberration: { value: 0.0 },
+                glitchIntensity: { value: 0.0 }
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D tDiffuse;
+                uniform vec2 pixelSize;
+                uniform float sanityFactor;
+                uniform float chromaticAberration;
+                uniform float glitchIntensity;
+                varying vec2 vUv;
+
+                float rand(vec2 co) {
+                    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+                }
+
+                void main() {
+                    vec2 uv = vUv;
+                    
+                    // Trigger Stage 1 / Stage 2 Jitter and Scanline Offset Adjustments
+                    if(glitchIntensity > 0.1) {
+                        if(rand(vec2(floor(uv.y * 10.0), 0.0)) < glitchIntensity) {
+                            uv.x += (rand(vec2(uv.y, 0.0)) - 0.5) * 0.1;
+                        }
+                    }
+
+                    // Chromatic Aberration Matrix Setup
+                    vec4 cr = texture2D(tDiffuse, uv + vec2(chromaticAberration, 0.0));
+Use code with caution.
+vec4 cg = texture2D(tDiffuse, uv);
+vec4 cb = texture2D(tDiffuse, uv - vec2(chromaticAberration, 0.0));
+vec4 texColor = vec4(cr.r, cg.g, cb.b, 1.0);
+// Low-poly Custom Checkerboard Dither Calculation Pass
+vec2 ditherCoord = gl_FragCoord.xy / pixelSize;
+float ditherPattern = mod(floor(ditherCoord.x) + floor(ditherCoord.y), 2.0);
+if(sanityFactor > 0.5 && ditherPattern < 0.5) {
+texColor.rgb *= (1.0 - (sanityFactor * 0.3));
+}
+gl_FragColor = texColor;
+}
+`
+});
+// Initialize Native Input Managers
+const keysPressed = {};
+let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+document.getElementById('blocker').addEventListener('click', () => {
+initEngine();
+document.getElementById('blocker').style.display = 'none';
+});
+function initEngine() {
+// Scene Setup
+scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x000000, 0.1); // Fixed 10m absolute visibility mask
+camera = new THREE.PerspectiveCamera(60, ENGINE.width / ENGINE.height, 0.1, 100);
+camera.position.set(0, 1.8, 0);
+clock = new THREE.Clock();
+// Audio Core Configuration Component Initialization
+initAudioEngine();
+// WebGL Renderer Interface Setup Core Override
+renderer = new THREE.WebGLRenderer({ antialias: false, precision: 'mediump' });
+renderer.setSize(ENGINE.width, ENGINE.height, false);
+renderer.shadowMap.enabled = false; // Turn off generic real-time dynamic light maps for global loops
+document.getElementById('game-container').appendChild(renderer.domElement);
+// Buffer Initialization targeting exactly 320x240 Context Frame Bounds
+renderTarget = new THREE.WebGLRenderTarget(ENGINE.width, ENGINE.height, {
+minFilter: THREE.NearestFilter,
+magFilter: THREE.NearestFilter,
+format: THREE.RGBFormat
+});
+// Input Mapping Registries
+window.addEventListener('keydown', onKeyDown);
+window.addEventListener('keyup', onKeyUp);
+window.addEventListener('mousemove', onMouseMove);
+document.body.requestPointerLock = document.body.requestPointerLock || document.body.mozRequestPointerLock;
+document.body.requestPointerLock();
+// Structural Environment Creation Block
+buildMansionGeometry();
+initPlayerFlashlight();
+spawnMonstersDatabase();
+// Execute Opening Intro Cinematic Subroutine Timeline Sequence Loop
+runOpeningCutscene();
+}
+function initAudioEngine() {
+try {
+audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+lowPassFilter = audioCtx.createBiquadFilter();
+lowPassFilter.type = 'lowpass';
+lowPassFilter.frequency.setValueAtTime(22000, audioCtx.currentTime); // Simulate 22kHz PS1 Sound Chip Architecture
+lowPassFilter.connect(audioCtx.destination);
+} catch(e) {
+console.warn("Audio hardware fallback configuration enabled.");
+}
+}
+function playRetroSound(freq, type, duration, vol) {
+if(!audioCtx) return;
+let osc = audioCtx.createOscillator();
+let gain = audioCtx.createGain();
+osc.type = type;
+osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+osc.connect(gain);
+gain.connect(lowPassFilter);
+osc.start();
+osc.stop(audioCtx.currentTime + duration);
+}
+// --- TIMELINE NARRATIVE INTERFACE ARCHITECTURE ---
+const introLines = [
+"You always do this. Every single time I leave you alone for five minutes, you find a way to ruin things.",
+"Look at me when I'm speaking to you! Do you have any idea how much work I put into keeping this place together?",
+"You're just like your father. Selfish. Angry. Always looking at what everyone else has with pure jealousy.",
+"You think you can just escape your—[AUDIO_GLITCH_POP]—r-r-responsibilities? You can't hide from—[STUTTER]—me.",
+"You... are... the... r-r-r-reason... everything... [STATIC]... FRACTURED.",
+"[METALLIC SCRATCH HARMONICS LOOP SCALING TO SILENCE]"
+];
+function runOpeningCutscene() {
+PLAYER.controlsLocked = true;
+let lineIdx = 0;
+const subtitleEl = document.getElementById('subtitles');
+function displayNextLine() {
+if(lineIdx < introLines.length) {
+subtitleEl.innerText = introLines[lineIdx];
+if(lineIdx < 3) playRetroSound(120 - (lineIdx * 20), 'triangle', 2.0, 0.4);
+else if(lineIdx === 3) playRetroSound(70, 'sawtooth', 2.5, 0.5);
+else if(lineIdx === 4) playRetroSound(45, 'sawtooth', 3.0, 0.6);
+else playRetroSound(30, 'square', 1.5, 0.7);
+lineIdx++;
+setTimeout(displayNextLine, 3500);
+} else {
+subtitleEl.innerText = "";
+// Transition to Part B Exterior Gateway Event Frame Threshold Sequence Block
+setTimeout(() => {
+playRetroSound(180, 'sawtooth', 3.0, 0.8); // Volumetric wolf howl simulation component
+PLAYER.controlsLocked = false;
+executeEngineLoop();
+}, 3000);
+}
+}
+displayNextLine();
+}
+// --- STRUCTURAL ENVIRONMENT & GEOMETRY LAYOUT MATRIX ---
+function buildMansionGeometry() {
+// Rigid Low-poly Asset Material Configuration Wrapper Array
+const wallMaterial = new THREE.MeshBasicMaterial({
+color: 0x3a3a3a,
+wireframe: false
+});
+const floorMaterial = new THREE.MeshBasicMaterial({ color: 0x1f1f1f });
+const ceilingMaterial = new THREE.MeshBasicMaterial({ color: 0x111111 });
+// Massive Estate Blueprint Geometry Execution Logic Loop (8m Ceilings Enabled)
+const mapSize = 80;
+const ceilingHeight = 8.0;
+const floorGeo = new THREE.PlaneGeometry(mapSize, mapSize);
+const floorMesh = new THREE.Mesh(floorGeo, floorMaterial);
+floorMesh.rotation.x = -Math.PI / 2;
+scene.add(floorMesh);
+const ceilGeo = new THREE.PlaneGeometry(mapSize, mapSize);
+const ceilMesh = new THREE.Mesh(ceilGeo, ceilingMaterial);
+ceilMesh.rotation.x = Math.PI / 2;
+ceilMesh.position.y = ceilingHeight;
+scene.add(ceilMesh);
+// Room Walls Definitions Matrix Architecture
+const wallGeo = new THREE.BoxGeometry(mapSize, ceilingHeight, 1);
+// Outer Boundary Blocks Enclosure Layer
+let nWall = new THREE.Mesh(wallGeo, wallMaterial); nWall.position.set(0, ceilingHeight/2, -mapSize/2); scene.add(nWall);
+let sWall = new THREE.Mesh(wallGeo, wallMaterial); sWall.position.set(0, ceilingHeight/2, mapSize/2); scene.add(sWall);
+let eWall = new THREE.Mesh(wallGeo, wallMaterial); eWall.position.set(mapSize/2, ceilingHeight/2, 0); eWall.rotation.y = Math.PI/2; scene.add(eWall);
+let wWall = new THREE.Mesh(wallGeo, wallMaterial); wWall.position.set(-mapSize/2, ceilingHeight/2, 0); wWall.rotation.y = Math.PI/2; scene.add(wWall);
+// Generative Internal Structural Partitions (Ballroom / Kitchen Blueprint Footprints)
+createInternalWall(0, 0, 30, ceilingHeight, 0); // Center Core Divider Spine Block
+createInternalWall(-15, 20, 20, ceilingHeight, Math.PI/2); // Kitchen Boundary Wing Frame
+}
+function createInternalWall(x, z, length, height, rotation) {
+const wGeo = new THREE.BoxGeometry(length, height, 0.8);
+const wMat = new THREE.MeshBasicMaterial({ color: 0x2d2d2d });
+const wall = new THREE.Mesh(wGeo, wMat);
+wall.position.set(x, height/2, z);
+wall.rotation.y = rotation;
+scene.add(wall);
+}
+function initPlayerFlashlight() {
+// Forward Conical Spotlight Architecture
+torchLightSource = new THREE.SpotLight(0xffffff, 4.0, 35, Math.PI / 4, 0.5, 1);
+torchLightSource.position.set(0, 0, 0);
+scene.add(torchLightSource);
+scene.add(torchLightSource.target);
+}
+// --- ENEMY STATE MACHINES & AI SYSTEMS ---
+function spawnMonstersDatabase() {
+// Factory configuration container defining multi-floor entities metrics values
+createMonsterInstance("Little Brother", 1, 0x990000, new THREE.Vector3(-10, 0, -15));
+createMonsterInstance("Big Brother", 2, 0x660000, new THREE.Vector3(15, 0, 10));
+createMonsterInstance("Mom", 3, 0xff00ff, new THREE.Vector3(0, 0, 30));
+}
+function createMonsterInstance(name, floorNative, colorHex, initialPos) {
+const mGeo = new THREE.BoxGeometry(1.2, 2.5, 1.2);
+const mMat = new THREE.MeshBasicMaterial({ color: colorHex });
+const mesh = new THREE.Mesh(mGeo, mMat);
+mesh.position.copy(initialPos);
+mesh.position.y = 1.25;
+scene.add(mesh);
+entities.push({
+name: name,
+floor: floorNative,
+mesh: mesh,
+baseSpeed: 0.04 + (floorNative * 0.015),
+abilityCooldown: 30 - (floorNative * 5),
+timer: 0,
+isCured: false,
+level: 1
+});
+}
+// --- INPUT SIGNAL MANAGEMENT INTERFACES ---
+function onKeyDown(e) {
+if(PLAYER.controlsLocked) return;
+keysPressed[e.code] = true;
+switch(e.code) {
+case 'KeyW': moveForward = true; break;
+case 'KeyS': moveBackward = true; break;
+case 'KeyA': moveLeft = true; break;
+case 'KeyD': moveRight = true; break;
+case 'ShiftLeft':
+if(!PLAYER.isExhausted) PLAYER.isSprinting = true;
+break;
+case 'KeyG':
+executeFlashlightDrop();
+break;
+}
+// Digit Keys 1-8 Input Selector Hooks Map
+if(e.key >= '1' && e.key <= '8') {
+let idx = parseInt(e.key) - 1;
+setActiveInventorySlot(idx);
+}
+}
+function onKeyUp(e) {
+keysPressed[e.code] = false;
+switch(e.code) {
+case 'KeyW': moveForward = false; break;
+case 'KeyS': moveBackward = false; break;
+case 'KeyA': moveLeft = false; break;
+case 'KeyD': moveRight = false; break;
+case 'ShiftLeft': PLAYER.isSprinting = false; break;
+}
+}
+function onMouseMove(e) {
+if (document.pointerLockElement !== document.body && document.mozPointerLockElement !== document.body) return;
+if (PLAYER.controlsLocked) return;
+camera.rotation.y -= e.movementX * 0.0025;
+camera.rotation.x -= e.movementY * 0.0025;
+camera.rotation.x = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, camera.rotation.x));
+}
+function setActiveInventorySlot(slotIdx) {
+document.getElementById(slot-${PLAYER.activeSlot}).classList.remove('active');
+PLAYER.activeSlot = slotIdx;
+document.getElementById(slot-${PLAYER.activeSlot}).classList.add('active');
+playRetroSound(440, 'triangle', 0.05, 0.2); // Key-ring rattle simulation component
+}
+function executeFlashlightDrop() {
+if(PLAYER.inventory[PLAYER.activeSlot] === "Torchlight" && !PLAYER.torchDropped) {
+PLAYER.torchDropped = true;
+PLAYER.inventory[PLAYER.activeSlot] = null;
+document.getElementById(slot-${PLAYER.activeSlot}).innerText = "---";
+// Spawn dropped concrete dynamic geometry layout representation asset
+const tGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.8, 4);
+const tMat = new THREE.MeshBasicMaterial({ color: 0x555555 });
+droppedTorchMesh = new THREE.Mesh(tGeo, tMat);
+droppedTorchMesh.position.copy(camera.position);
+droppedTorchMesh.position.y = 0.2; // Anchored near floor plane geometries bounds
+droppedTorchMesh.rotation.z = Math.PI / 2;
+scene.add(droppedTorchMesh);
+playRetroSound(150, 'sawtooth', 0.3, 0.5); // Dropped plastic thud audio feedback
+}
+}
+// --- CORE DETERMINISTIC ENGINE PROCESSOR CYCLE ---
+function executeEngineLoop() {
+requestAnimationFrame(executeEngineLoop);
+const dt = clock.getDelta();
+// Process Physics, Metrics Engine Cycles Loops
+processPlayerMovement(dt);
+processSanityEngine(dt);
+processAIIntelligenceMatrix(dt);
+// Complete Synchronized Matrix Pass Layer Update
+updateHardwareLighting();
+updateHUDInterface();
+// Render Application Context Frame
+renderer.render(scene, camera);
+}
+function processPlayerMovement(dt) {
+if(PLAYER.controlsLocked) return;
+// Stamina Drainage Evaluation Matrix Loop Bounds Calibration
+if(PLAYER.isSprinting && (moveForward || moveBackward || moveLeft || moveRight)) {
+PLAYER.stamina -= dt * (100 / 6.0); // Exact 6-second total exhaustion drop window rate
+if(PLAYER.stamina <= 0) {
+PLAYER.stamina = 0;
+PLAYER.isSprinting = false;
+PLAYER.isExhausted = true;
+PLAYER.exhaustTimer = 4.0; // Hard locked for exactly 4.0 seconds execution frame lock
+playRetroSound(80, 'sawtooth', 4.0, 0.8); // High volume chest heaving gasp audio file hook execution node
+}
+} else {
+if(PLAYER.exhaustTimer > 0) {
+PLAYER.exhaustTimer -= dt;
+if(PLAYER.exhaustTimer <= 0) PLAYER.isExhausted = false;
+}
+if(PLAYER.stamina < 100 && !PLAYER.isSprinting) {
+PLAYER.stamina += dt * 15.0; // Recovery scalar calibration metrics pass
+}
+}
+// Calculations processing execution loops mapping inputs to velocities vectors matrices definitions
+let speed = PLAYER.isSprinting ? 6.5 : (PLAYER.isExhausted ? 2.0 : 4.0);
+PLAYER.velocity.set(0, 0, 0);
+PLAYER.direction.set(Number(moveRight) - Number(moveLeft), 0, Number(moveForward) - Number(moveBackward));
+PLAYER.direction.normalize();
+if (moveForward || moveBackward) PLAYER.velocity.z -= PLAYER.direction.z * speed * dt;
+if (moveLeft || moveRight) PLAYER.velocity.x -= PLAYER.direction.x * speed * dt;
+camera.translateX(PLAYER.velocity.x);
+camera.translateZ(PLAYER.velocity.z);
+camera.position.y = 1.8; // Force lock perspective heights plane reference index line bounding limit
+// Dynamic Footstep Acoustic Audio Loop Node
+if((moveForward || moveBackward || moveLeft || moveRight) && Math.sin(clock.getElapsedTime() * (PLAYER.isSprinting ? 14 : 8)) > 0.9) {
+let mult = PLAYER.isSprinting ? 3.0 : 1.0;
+playRetroSound(60, 'triangle', 0.1, 0.15 * mult);
+}
+}
+function processSanityEngine(dt) {
+// Evaluate structural conditions determining whether camera vector sits in lighting bounds context fields
+let lightSourcePos = PLAYER.torchDropped ? (droppedTorchMesh ? droppedTorchMesh.position : camera.position) : camera.position;
+let distToLight = camera.position.distanceTo(lightSourcePos);
+if(PLAYER.torchDropped && distToLight > 5.0) {
+PLAYER.sanity -= dt * 2.5; // Steady structural decay over unlit space bounds coordinates
+}
+if(PLAYER.sanity < 0) PLAYER.sanity = 0;
+// Trigger Post-Processing Visual Glitch Shaders Multi-Stage Intercept Pass Loops Layouts
+const vignetteEl = document.getElementById('panic-vignette');
+if(PLAYER.sanity <= 74 && PLAYER.sanity > 40) {
+// Stage 1: Paranoia Jitter Mode Activation Vector
+camera.position.x += (Math.random() - 0.5) * 0.02;
+vignetteEl.style.boxShadow = "inset 0 0 40px rgba(139, 0, 0, 0.4)";
+} else if(PLAYER.sanity <= 40) {
+// Stage 2: Breakdown Glitch Artifacts System Overrides Core Loop Executions Bounds
+camera.position.x += (Math.random() - 0.5) * 0.08;
+camera.position.y += (Math.random() - 0.5) * 0.08;
+vignetteEl.style.boxShadow = "inset 0 0 80px rgba(139, 0, 0, 0.9)";
+if(Math.random() < 0.05) playRetroSound(40, 'square', 0.2, 0.3); // Bit-crushed hallucination drone artifacts line insertion audio component
+} else {
+vignetteEl.style.boxShadow = "inset 0 0 0px rgba(0,0,0,0)";
+}
+}
+function processAIIntelligenceMatrix(dt) {
+// Proxemic Panic Distance Vector Engine Scanning Loops Passes Processing Layout Definitions
+let closestDist = 9999.0;
+entities.forEach(monster => {
+let dist = camera.position.distanceTo(monster.mesh.position);
+if(dist < closestDist) closestDist = dist;
+// Simple Translation Vector Tracking toward Camera Node
+if(!monster.isCured && !PLAYER.controlsLocked) {
+let dir = new THREE.Vector3().subVectors(camera.position, monster.mesh.position);
+dir.y = 0;
+dir.normalize();
+monster.mesh.position.addScaledVector(dir, monster.baseSpeed);
+}
+// Check Hit Resolution Intersection Overlap Boundaries Bounding Core Loop Boxes Matrix
+if(dist < 1.4 && !monster.isCured) {
+executeDeathTaxSequence();
+}
+});
+// Proxemic Radar Feedback Calculation System Engine Layout Mapping Layer Pass
+const vignetteEl = document.getElementById('panic-vignette');
+if(closestDist <= 20.0 && closestDist > 5.0) {
+// Trigger 20 Meters: Baseline peripheral vein alpha mapping and low frequency frame vibration layers
+let factor = (20.0 - closestDist) / 15.0;
+camera.position.y += (Math.random() - 0.5) * (0.02 * factor);
+} else if(closestDist <= 5.0 && closestDist >= 2.0) {
+// Scaling Chase 5-2 Meters: Structural violently shaking viewport bounds and extreme screen restrictions overlays mapping expansion
+let factor = (5.0 - closestDist) / 3.0;
+camera.position.x += (Math.random() - 0.5) * (0.12 * factor);
+camera.position.y += (Math.random() - 0.5) * (0.12 * factor);
+}
+}
+function updateHardwareLighting() {
+if(!PLAYER.torchDropped) {
+// Matrix lock Torchlight directly onto player camera viewport vectors transform coordinates tracking
+torchLightSource.position.copy(camera.position);
+let targetVec = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+torchLightSource.target.position.copy(camera.position).add(targetVec);
+} else if(droppedTorchMesh) {
+// Anchor light projection strictly from dropped physical engine model orientation layout coordinates matrix
+torchLightSource.position.copy(droppedTorchMesh.position);
+torchLightSource.target.position.copy(droppedTorchMesh.position).add(new THREE.Vector3(1, -0.2, 0));
+}
+}
+function executeDeathTaxSequence() {
+PLAYER.lives--;
+playRetroSound(45, 'sawtooth', 0.8, 0.9); // Death crash audio event file sample line mapping trigger array
+if(PLAYER.lives > 0) {
+document.getElementById(skull-${3 - PLAYER.lives}).classList.add('lit');
+// Respawn character directly back inside the Floor 1 safe zone domain context boundaries vectors positions
+camera.position.set(0, 1.8, 0);
+PLAYER.sanity = 100;
+PLAYER.hp = 100;
+playRetroSound(200, 'triangle', 1.5, 0.5);
+} else {
+// On Death 3: Execute full screen shatter progress drop initialization engine reset sequence block
+document.getElementById('subtitles').innerText = "PROGRESS SHATTERED. WORLD COORDINATES SCRAMBLED.";
+playRetroSound(30, 'square', 2.5, 1.0); // Piercing mirror breakage simulation system low frequency bass drop baseline layer line component
+setTimeout(() => {
+location.reload(); // Hard cycle map reset database wipe instruction configuration
+}, 3000);
+}
+}
+function updateHUDInterface() {
+document.getElementById('hp-bar').style.width = ${PLAYER.hp}%;
+document.getElementById('stamina-bar').style.width = ${PLAYER.stamina}%;
+document.getElementById('sanity-bar').style.width = ${PLAYER.sanity}%;
+document.getElementById('comp-val').innerText = ${WORLD_PROGRESS.completion}%;
+}
